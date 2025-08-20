@@ -1,0 +1,27 @@
+---------------------------------------
+http://pypi.org/
+PYTHON PACKAGE INDEX
+---------
+
+
+https://ascii.co.uk/art
+ASCII ART
+
+http://patorjk.com/
+CREATE PERSON TEXT ASCII
+----------
+
+draw.io
+https://app.diagrams.net/
+FLOW CHART MAKER
+
+----------------
+
+https://haveibeenpwned.com/
+CHECK IF EMAIL PASSWORD HAS BEEN HACKED
+
+https://reeborg.ca/
+VISUALIZE CODE WITH ROBOT
+
+https://pythontutor.com/
+VISUALIZE AND DEBUG CODE
