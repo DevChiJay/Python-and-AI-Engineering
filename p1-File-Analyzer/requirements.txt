@@ -1,0 +1,22 @@
+# File Analyzer Requirements
+# This project uses only Python standard library modules
+# No external dependencies required
+
+# The following are standard library modules used:
+# - os: Operating system interface
+# - sys: System-specific parameters and functions  
+# - pathlib: Object-oriented filesystem paths
+# - argparse: Command-line argument parsing
+# - json: JSON encoder and decoder
+# - csv: CSV file reading and writing
+# - collections: Specialized container datatypes
+# - re: Regular expression operations
+# - datetime: Date and time handling
+# - mimetypes: MIME type detection
+
+# If you want to enhance the analyzer with additional features, 
+# you might consider these optional packages:
+# pandas>=1.3.0        # For advanced CSV/data analysis
+# python-magic>=0.4.24 # For better file type detection
+# chardet>=4.0.0       # For character encoding detection
+# pillow>=8.0.0        # For image file analysis
