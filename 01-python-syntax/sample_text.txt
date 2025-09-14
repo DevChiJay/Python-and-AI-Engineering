@@ -1,0 +1,17 @@
+Sample text file for testing the Python Basics Demo Tool.
+
+This file contains some text that will be analyzed by our tool.
+It has multiple lines and words to demonstrate the analysis capabilities.
+
+The tool will count:
+- Characters
+- Words
+- Lines
+- File size
+
+It will also demonstrate various Python concepts:
+1. Classes and inheritance
+2. File I/O operations
+3. Exception handling
+4. Standard library usage
+5. Output formatting
