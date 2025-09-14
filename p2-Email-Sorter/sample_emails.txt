@@ -1,0 +1,16 @@
+john.doe@example.com
+alice.smith@company.co.uk
+invalid-email
+bob.jones@website.org
+alice.smith@company.co.uk
+contact@domain.com
+john,doe@broken.net
+user@missing-domain
+bob.jones@website.org
+someone@somewhere.io
+user@domain.com/extra
+contact@domain.com
+proper@email.com
+not-an-email
+someone@somewhere.io
+blank@domain

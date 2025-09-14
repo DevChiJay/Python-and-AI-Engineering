@@ -1,0 +1,3 @@
+"""
+Email Sorter package
+"""
