@@ -1,0 +1,10 @@
+2025-09-16 23:57:29,820 - chatbot - INFO - Starting ChatGPT CLI application
+2025-09-16 23:57:30,201 - chatbot.ai_client - INFO - ChatGPT client initialized with model: gpt-5
+2025-09-16 23:58:19,230 - chatbot - INFO - Starting ChatGPT CLI application
+2025-09-16 23:58:19,604 - chatbot.ai_client - INFO - ChatGPT client initialized with model: gpt-5-minidos
+2025-09-16 23:58:36,713 - chatbot.ai_client - ERROR - OpenAI API error: Error code: 404 - {'error': {'message': 'The model `gpt-5-minidos` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}
+2025-09-16 23:58:36,713 - chatbot - ERROR - Error getting response from ChatGPT: Error code: 404 - {'error': {'message': 'The model `gpt-5-minidos` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}
+2025-09-16 23:59:00,951 - chatbot.ai_client - ERROR - OpenAI API error: Error code: 404 - {'error': {'message': 'The model `gpt-5-minidos` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}
+2025-09-16 23:59:00,952 - chatbot - ERROR - Error getting response from ChatGPT: Error code: 404 - {'error': {'message': 'The model `gpt-5-minidos` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}
+2025-09-16 23:59:21,088 - chatbot - INFO - Starting ChatGPT CLI application
+2025-09-16 23:59:21,459 - chatbot.ai_client - INFO - ChatGPT client initialized with model: gpt-5-mini
