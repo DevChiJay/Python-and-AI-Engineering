@@ -18,12 +18,19 @@ def main():
                         help="Remove duplicate emails")
     parser.add_argument("-i", "--invalid", action="store_true", 
                         help="Remove invalid emails")
+    parser.add_argument("-e", "--exclude-domain", type=str, metavar="DOMAIN",
+                        help="Remove emails from a specific domain (e.g., gmail.com). Creates two files: one without the domain and one with only the removed emails")
     
     args = parser.parse_args()
     
     # Set default output file if not provided
     if not args.output:
-        output_file = args.input_file.rsplit('.', 1)[0] + "_processed.txt"
+        base_name = args.input_file.rsplit('.', 1)[0]
+        if args.exclude_domain:
+            domain_clean = args.exclude_domain.replace('@', '').replace('.', '_')
+            output_file = f"{base_name}_without_{domain_clean}.txt"
+        else:
+            output_file = f"{base_name}_processed.txt"
     else:
         output_file = args.output
     
@@ -45,9 +52,24 @@ def main():
             emails = email_processor.remove_invalid(emails)
             print(f"After removing invalid emails: {len(emails)} emails remaining")
             
+        if args.exclude_domain:
+            original_count = len(emails)
+            emails_without_domain, emails_with_domain = email_processor.separate_by_domain(emails, args.exclude_domain)
+            
+            # Save emails with the specified domain to a separate file
+            domain_clean = args.exclude_domain.replace('@', '').replace('.', '_')
+            removed_file = args.input_file.rsplit('.', 1)[0] + f"_{domain_clean}_removed.txt"
+            file_handler.write_emails(removed_file, emails_with_domain)
+            
+            print(f"Removed {len(emails_with_domain)} emails from domain '{args.exclude_domain}': {len(emails_without_domain)} emails remaining")
+            print(f"Removed emails saved to: {removed_file}")
+            
+            # Continue with the filtered emails (without the domain)
+            emails = emails_without_domain
+            
         # If no operation selected, show usage
-        if not (args.duplicates or args.invalid):
-            print("No operation selected. Please use -d or -i options.")
+        if not (args.duplicates or args.invalid or args.exclude_domain):
+            print("No operation selected. Please use -d, -i, or -e options.")
             print("Use --help for more information.")
             return
             

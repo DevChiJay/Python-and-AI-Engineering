@@ -17,7 +17,7 @@ class FileHandler:
             FileNotFoundError: If the input file does not exist
         """
         try:
-            with open(file_path, 'r') as file:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
                 # Read all lines and strip whitespace
                 emails = [line.strip() for line in file.readlines()]
                 # Remove empty lines
@@ -39,7 +39,7 @@ class FileHandler:
             Exception: If there's an error writing to the file
         """
         try:
-            with open(file_path, 'w') as file:
+            with open(file_path, 'w', encoding='utf-8', errors='replace') as file:
                 for email in emails:
                     file.write(f"{email}\n")
         except Exception as e:

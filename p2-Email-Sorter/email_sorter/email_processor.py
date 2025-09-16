@@ -63,3 +63,54 @@ class EmailProcessor:
         
         # Use regex for more comprehensive validation
         return bool(self.email_pattern.match(email))
+    
+    def remove_domain(self, emails, domain):
+        """
+        Remove emails from a specific domain.
+        
+        Args:
+            emails (list): List of email strings
+            domain (str): Domain to remove (e.g., 'gmail.com' or '@gmail.com')
+            
+        Returns:
+            list: List with emails from the specified domain removed
+        """
+        # Normalize domain - ensure it starts with @
+        if not domain.startswith('@'):
+            domain = '@' + domain
+        
+        filtered_emails = []
+        for email in emails:
+            email = email.strip()
+            if email and not email.lower().endswith(domain.lower()):
+                filtered_emails.append(email)
+        
+        return filtered_emails
+    
+    def separate_by_domain(self, emails, domain):
+        """
+        Separate emails into two lists: those with the specified domain and those without.
+        
+        Args:
+            emails (list): List of email strings
+            domain (str): Domain to separate (e.g., 'gmail.com' or '@gmail.com')
+            
+        Returns:
+            tuple: (emails_without_domain, emails_with_domain)
+        """
+        # Normalize domain - ensure it starts with @
+        if not domain.startswith('@'):
+            domain = '@' + domain
+        
+        emails_without_domain = []
+        emails_with_domain = []
+        
+        for email in emails:
+            email = email.strip()
+            if email:
+                if email.lower().endswith(domain.lower()):
+                    emails_with_domain.append(email)
+                else:
+                    emails_without_domain.append(email)
+        
+        return emails_without_domain, emails_with_domain
