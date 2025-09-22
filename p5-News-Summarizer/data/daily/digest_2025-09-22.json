@@ -1,0 +1,19 @@
+{
+  "date": "2025-09-22",
+  "items": [
+    {
+      "title": "AI breakthroughs reshape productivity",
+      "summary": "Artificial intelligence continues to transform industries. New breakthroughs in large language models improve reasoning and coding. Experts expect productivity gains across sectors.",
+      "url": "https://example.com/ai-breakthroughs",
+      "source": "ExampleNews",
+      "published_at": "2025-09-22 17:21:28.636270+00:00"
+    },
+    {
+      "title": "Climate initiatives gather momentum",
+      "summary": "Nations commit to ambitious climate targets. Renewable energy adoption rises as costs fall. Businesses invest in sustainable technologies.",
+      "url": "https://example.com/climate-initiatives",
+      "source": "ExampleNews",
+      "published_at": "2025-09-22 17:21:28.636270+00:00"
+    }
+  ]
+}
