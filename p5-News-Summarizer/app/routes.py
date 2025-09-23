@@ -28,7 +28,7 @@ async def top_news(
     return await fetch_top_headlines(country=country, limit=limit)
 
 
-@router.post("/summarize", response_model=Summary, tags=["summarize"], summary="Summarize arbitrary text")
+@router.post("/summarize", response_model=Summary, tags=["summarize"], summary="Summarize text using OpenAI (with fallback)")
 async def summarize(req: SummarizeRequest) -> Summary:
     if not req.text or not req.text.strip():
         raise HTTPException(status_code=400, detail="text is required")

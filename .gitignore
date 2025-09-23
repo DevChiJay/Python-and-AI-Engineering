@@ -3,3 +3,4 @@
 .gitignore
 .env
 weather_data
+__pycache__

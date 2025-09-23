@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import os
 
 from .config import get_settings
 
@@ -26,11 +27,47 @@ def split_sentences(text: str) -> list[str]:
 def summarize_text(text: str, max_sentences: int | None = None) -> str:
     settings = get_settings()
     max_sents = max_sentences or settings.summary_sentences
+
+    # Prefer OpenAI if configured via settings or environment
+    api_key = getattr(settings, "openai_api_key", None) or os.getenv("OPENAI_API_KEY")
+    model = getattr(settings, "openai_model", None) or os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
+
+    if api_key:
+        try:
+            # Lazy import to avoid hard dependency if not used
+            from openai import OpenAI
+
+            client = OpenAI(api_key=api_key)
+            user_prompt = (
+                f"Summarize the following text in at most {max_sents} sentences. "
+                "Keep key facts, names, and numbers. Return only the summary.\n\n"
+                f"Text:\n{text}"
+            )
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a helpful assistant that produces concise, factual summaries of text and news articles."
+                        ),
+                    },
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.2,
+            )
+            content = (resp.choices[0].message.content or "").strip()
+            if content:
+                return content
+        except Exception:
+            # If OpenAI call fails for any reason, fall back to the heuristic summarizer below
+            pass
+
+    # Fallback: score sentences by word frequency (simple extractive summarizer)
     sentences = split_sentences(text)
     if len(sentences) <= max_sents:
         return text.strip()
 
-    # Score sentences by word frequency (simple extractive)
     word_freq: dict[str, int] = {}
     for s in sentences:
         for w in WORD_RE.findall(s.lower()):
