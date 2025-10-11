@@ -4,3 +4,4 @@
 .env
 weather_data
 __pycache__
+.gradio
