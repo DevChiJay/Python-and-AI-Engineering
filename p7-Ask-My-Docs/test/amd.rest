@@ -1,0 +1,38 @@
+@host = http://127.0.0.1:8000
+
+###
+# Health check
+GET {{host}}/
+
+###
+# Upload a TXT document (edit the path to a real file)
+POST {{host}}/docs/upload
+Content-Type: multipart/form-data; boundary=MyBoundary
+
+--MyBoundary
+Content-Disposition: form-data; name="file"; filename="notes.txt"
+Content-Type: text/plain
+
+< C:\Users\user\Downloads\Invest.txt
+--MyBoundary--
+
+###
+# Upload a PDF document (edit the path to a real file)
+POST {{host}}/docs/upload
+Content-Type: multipart/form-data; boundary=MyBoundary
+
+--MyBoundary
+Content-Disposition: form-data; name="file"; filename="sample.pdf"
+Content-Type: application/pdf
+
+< d:\path\to\your.pdf
+--MyBoundary--
+
+###
+# Ask a question about the ingested docs
+POST {{host}}/query/ask
+Content-Type: application/json
+
+{
+  "question": "Explain the the project from the readme"
+}
