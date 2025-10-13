@@ -1,0 +1,9 @@
+fastapi
+transformers
+torch
+huggingface-hub
+openai
+pydub
+soundfile
+python-dotenv
+uvicorn[standard]

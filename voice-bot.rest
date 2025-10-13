@@ -1,0 +1,7 @@
+POST http://127.0.0.1:8000/tts/generate
+Content-Type: application/json
+
+{
+    "text": "Silence Sundays Bring Unexpected Calm and Crowds to Greendale.",
+    "return_base64": false
+}

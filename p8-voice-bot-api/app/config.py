@@ -1,0 +1,19 @@
+from functools import lru_cache
+from pydantic import BaseModel
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from a .env file if present
+load_dotenv()
+
+class Settings(BaseModel):
+    # Define any settings you need here; placeholders for future voice-bot use
+    openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
+    # Support both common env var names
+    hf_token: str | None = os.getenv("HUGGINGFACEHUB_API_TOKEN") or os.getenv("HF_TOKEN")
+    environment: str = os.getenv("ENVIRONMENT", "development")
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()
