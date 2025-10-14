@@ -14,6 +14,9 @@ class Settings(BaseModel):
     environment: str = os.getenv("ENVIRONMENT", "development")
     # Optional path to a local SpeechT5 speaker embedding (.npy or .pt)
     speecht5_xvector_path: str | None = os.getenv("SPEECHT5_XVECTOR_PATH")
+    allowed_origins: list[str] = (
+        [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",") if o.strip()] or ["*"]
+    )
 
 
 @lru_cache()

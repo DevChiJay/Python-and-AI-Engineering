@@ -1,53 +1,120 @@
 # voice-bot-api
 
-FastAPI starter for a voice bot backend with modular structure (routers, services, utils) and .env loader.
+FastAPI backend for text-to-speech (multiple engines) and speech-to-text with modular architecture.
 
 ## Features
-- Modular app layout: `routers/`, `services/`, `utils/`
-- `.env` loading via `python-dotenv` in `app/config.py`
-- Health check at `/health`
+* Modular layout: `routers/`, `services/`, `utils/`
+* Environment + secrets loading via `python-dotenv` (`app/config.py`)
+* Text-to-Speech engines:
+  * Hugging Face Inference Provider (Kokoro / fal-ai) – `/tts/generate`
+  * Local SpeechT5 (no provider API required) – `/tts/local`
+  * gTTS (Google Translate TTS) – `/tts/gtts`
+* Speech-to-Text (ASR) via OpenAI Whisper API – `/asr/transcribe`
+* Health check – `/health`
+* CORS configuration with `ALLOWED_ORIGINS`
+
+## Endpoints Summary
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Health check |
+| GET | `/` | Root metadata |
+| POST | `/tts/generate` | Remote provider Kokoro TTS (needs HF token) |
+| POST | `/tts/local` | Local SpeechT5 TTS (downloads models once) |
+| POST | `/tts/gtts` | gTTS MP3 synthesis |
+| POST | `/asr/transcribe` | Whisper ASR transcription (needs OpenAI key) |
+
+## Environment Variables
+See `.env.example` for all. Important ones:
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `OPENAI_API_KEY` | For ASR | OpenAI Whisper transcription |
+| `HUGGINGFACEHUB_API_TOKEN` / `HF_TOKEN` | For `/tts/generate` | Hugging Face provider auth |
+| `SPEECHT5_XVECTOR_PATH` | Optional | Custom speaker embedding (.npy / .pt) for SpeechT5 |
+| `ALLOWED_ORIGINS` | Optional | CORS origins (comma-separated or `*`) |
+| `ENVIRONMENT` | Optional | Environment label (default: development) |
 
 ## Requirements
-See `requirements.txt`.
+Install from `requirements.txt`:
+```
+pip install -r requirements.txt
+```
 
-## Running locally
-1. (Optional) create a `.env` file at the project root with keys like:
-   ```env
-   ENVIRONMENT=development
-   OPENAI_API_KEY=sk-...
-   HUGGINGFACEHUB_API_TOKEN=hf_...
-   ```
-2. Install dependencies
-3. Start the server
+## Running Locally
+1. Copy `.env.example` to `.env` and fill values.
+2. Create & activate a virtual environment (recommended).
+3. Install dependencies.
+4. Start the server.
 
 ### Quickstart
-- Using uvicorn:
-
 ```bash
-# From project root
 pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+python main.py
 ```
+Server runs at: http://localhost:8000
 
-- Or run as a module:
+### Uvicorn (explicit)
 ```bash
-python -m app.main
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Open http://localhost:8000/health to verify.
+## Example Requests
 
-## Project structure
+### Kokoro (provider) TTS
+```bash
+curl -X POST http://localhost:8000/tts/generate \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Hello from Kokoro"}'
 ```
-voice-bot-api/
-  app/
-    __init__.py
-    config.py
-    main.py
-    routers/
-      health.py
-    services/
-    utils/
-  requirements.txt
-  README.md
-  .env.example
+
+### Local SpeechT5
+```bash
+curl -X POST http://localhost:8000/tts/local \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Hello from local SpeechT5","return_base64":true}'
 ```
+
+### gTTS
+```bash
+curl -X POST http://localhost:8000/tts/gtts \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Hello from gTTS","lang":"en","slow":false}'
+```
+
+### Whisper ASR
+```bash
+curl -X POST http://localhost:8000/asr/transcribe \
+  -H "accept: application/json" \
+  -F "file=@path/to/audio.wav"
+```
+
+## Project Structure (trimmed)
+```
+app/
+  config.py
+  routers/
+    health.py
+    tts.py
+    asr.py
+  services/
+    tts_service.py
+    gtts_service.py
+    whisper_asr.py
+  utils/
+    audio_utils.py
+data/
+  inputs/
+  outputs/
+requirements.txt
+.env.example
+README.md
+```
+
+## Notes
+* First run of SpeechT5 downloads models; allow time.
+* Provide your own `SPEECHT5_XVECTOR_PATH` for consistent voice.
+* gTTS calls external service (network required).
+* For production, consider: rate limiting, request auth, file size limits, persistent storage (S3), and background jobs for long tasks.
+
+## License
+MIT (adjust as needed).

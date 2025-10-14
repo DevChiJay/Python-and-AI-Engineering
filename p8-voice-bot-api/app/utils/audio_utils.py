@@ -30,6 +30,22 @@ def save_wav_bytes(audio_bytes: bytes, *, base_dir: str | os.PathLike = "data/ou
     return path
 
 
+def save_audio_bytes(
+    audio_bytes: bytes,
+    *,
+    base_dir: str | os.PathLike = "data/outputs",
+    prefix: str = "tts",
+    ext: str = ".mp3",
+) -> Path:
+    """Generic save helper for arbitrary audio formats (e.g., MP3)."""
+    out_dir = ensure_output_dir(base_dir)
+    ts_name = gen_timestamp_filename(prefix=prefix, ext=ext)
+    path = out_dir / ts_name
+    with open(path, "wb") as f:
+        f.write(audio_bytes)
+    return path
+
+
 def to_base64(audio_bytes: bytes) -> str:
     return base64.b64encode(audio_bytes).decode("utf-8")
 

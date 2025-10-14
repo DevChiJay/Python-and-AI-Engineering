@@ -9,3 +9,5 @@ python-dotenv
 uvicorn[standard]
 sentencepiece
 numpy
+python-multipart
+gTTS

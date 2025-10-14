@@ -1,0 +1,29 @@
+POST http://127.0.0.1:8000/tts/local
+Content-Type: application/json
+
+{
+    "text": "Silence Sundays Brings me the greatest joy in life.",
+    "return_base64": false
+}
+
+# VoiceBot using Inference provider
+###
+POST http://127.0.0.1:8000/tts/generate
+Content-Type: application/json
+
+{
+    "text": "Silence Sundays Bring Unexpected Calm and Crowds to Greendale.",
+    "return_base64": false
+}
+
+###
+# Upload
+POST http://127.0.0.1:8000/asr/transcribe
+Content-Type: multipart/form-data; boundary=MyBoundary
+
+--MyBoundary
+Content-Disposition: form-data; name="file"; filename="notes.wav"
+Content-Type: application/json
+
+< D:\Learn\Python-and-AI\p8-voice-bot-api\data\outputs\tts_20251013_153857.wav
+--MyBoundary--
