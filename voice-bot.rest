@@ -1,7 +1,17 @@
+POST http://127.0.0.1:8000/tts/local
+Content-Type: application/json
+
+{
+    "text": "Silence Sundays Brings me the greatest joy in life.",
+    "return_base64": false
+}
+
+# VoiceBot using Inference provider
+###
 POST http://127.0.0.1:8000/tts/generate
 Content-Type: application/json
 
 {
-    "text": "Silence Sundays Bring Unexpected Calm and Crowds to Greendale.",
+    "text": "Silence Sundays Brings me the greatest joy in life.",
     "return_base64": false
 }

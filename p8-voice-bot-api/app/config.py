@@ -12,6 +12,8 @@ class Settings(BaseModel):
     # Support both common env var names
     hf_token: str | None = os.getenv("HUGGINGFACEHUB_API_TOKEN") or os.getenv("HF_TOKEN")
     environment: str = os.getenv("ENVIRONMENT", "development")
+    # Optional path to a local SpeechT5 speaker embedding (.npy or .pt)
+    speecht5_xvector_path: str | None = os.getenv("SPEECHT5_XVECTOR_PATH")
 
 
 @lru_cache()
