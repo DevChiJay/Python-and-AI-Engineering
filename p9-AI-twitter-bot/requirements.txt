@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+openai
+tweepy
+apscheduler
+sqlalchemy
+python-dotenv
+httpx
