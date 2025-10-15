@@ -1,0 +1,20 @@
+POST http://127.0.0.1:8000/admin/generate
+Content-Type: application/json
+
+{
+    "topic": "AI powered Twitter bot",
+    "style": "tweet"
+}
+
+###
+
+POST http://127.0.0.1:8000/admin/post
+Content-Type: application/json
+X-Idempotency-Key: fix-oauth1-perms-test-001
+
+{    
+  "type": "tweet",
+  "items": [
+    "Discover the future of conversation with AI-powered Twitter bots! These intelligent assistants can engage, inform, and entertain, transforming the way we interact online. Get ready for a new era of communication where every tweet sparks meaningful dialogue."
+  ]
+}
