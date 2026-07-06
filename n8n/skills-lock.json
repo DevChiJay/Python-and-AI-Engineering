@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "using-n8n-skills": {
+      "source": "n8n-io/skills",
+      "sourceType": "github",
+      "skillPath": "skills/using-n8n-skills/SKILL.md",
+      "computedHash": "1db9aaf6ab08acffa5404b3aab9040137db4862699110aa638610b2c00c73d73"
+    }
+  }
+}
