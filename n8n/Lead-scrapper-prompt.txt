@@ -1,0 +1,18 @@
+Give me a list of search queries for the keyword "dentist" for 30 sub-areas/micro-neighbourhoods of New York.
+
+Give me the list as a structured json following this format:
+
+[
+  {
+    "query": "hollywood+dentist"
+  },
+  {
+    "query": "downtown+los+angeles+dentist"
+  },
+  {
+    "query": "santa+monica+dentist"
+  },
+  {
+    "query": "westwood+dentist"
+  }
+]

@@ -1,0 +1,798 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## ⚙️ One-time Setup\n\n**1. Google Sheets — API Keys tab**\nIn your existing sheet, create a new tab named **`API Keys`** with these exact column headers in row 1:\n`api_key` | `owner` | `daily_limit` | `daily_count` | `last_reset` | `active`\n\nAdd one row per user:\n- `api_key`: a long random string (generate with `openssl rand -hex 16`)\n- `owner`: their name\n- `daily_limit`: `5`\n- `daily_count`: `0`\n- `last_reset`: `2000-01-01`\n- `active`: `yes`\n\nTo revoke a key: set `active` → `no`. To reset manually: set `daily_count` → `0`.\n\n**2. Credentials needed**\n- **Google Sheets**: already set up ✓\n- **Google Gemini**: bind on `Gemini Chat Model` sub-node\n- **Serper.dev Header Auth**: bind on `Search Google Maps via Serper`\n- **SMTP**: create in n8n → Credentials → New → SMTP. Bind on both email send nodes. Also set `fromEmail` in both nodes.\n\n**3. Webhook URL**\nOnce workflow is **Active**, your webhook URL is:\n`https://YOUR_N8N_DOMAIN/webhook/lead-generation`\nUpdate `WEBHOOK_URL` in `lead-form.html` to match.\n\n**4. CORS (if form is on a different domain)**\nSet `N8N_CORS_ALLOW_ORIGIN=*` (or your domain) in n8n's environment.",
+        "height": 520,
+        "width": 720,
+        "color": 7
+      },
+      "id": "8d7d866d-a11f-4f06-9c6e-d2c3d935a1e3",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [6528, 1776],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## 📊 Google Sheet Schema\n\n**Sheet name:** `API Keys`\n\n| api_key | owner | daily_limit | daily_count | last_reset | active |\n|---|---|---|---|---|---|\n| abc123xyz | Alice | 5 | 2 | 2026-07-08 | yes |\n| def456uvw | Bob | 5 | 0 | 2000-01-01 | no |\n\n⚠️ Column header names must match exactly (case-sensitive, underscores).\n\n`last_reset` uses ISO date format: `YYYY-MM-DD`\nThe workflow resets `daily_count` to 0 automatically when `last_reset` < today.",
+        "height": 260,
+        "width": 620,
+        "color": 4
+      },
+      "id": "46f2b4e3-99cd-4348-a6bd-63f6d4721582",
+      "name": "Sheet Schema",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [7296, 1776],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-generation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ac543057-4fcd-4278-82b7-dd5310fb9457",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "position": [6816, 2336],
+      "typeVersion": 2,
+      "webhookId": "lead-gen-v4-webhook-001"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "cc28fd2a-364f-4725-8971-a10f03f8b337",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [7056, 2144],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw",
+          "mode": "list",
+          "cachedResultName": "n8n Data sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 878241883,
+          "mode": "list",
+          "cachedResultName": "API KEYS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit#gid=878241883"
+        },
+        "options": {}
+      },
+      "id": "d86b9b0c-7866-451f-9249-5943030a8a1c",
+      "name": "Read API Keys",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [7056, 2416],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3yNBC63ijTtfDEDM",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// All rows from the \"API Keys\" sheet arrive as $input items\nconst allRows = $input.all()\n\n// Extract request fields from the original webhook body\nconst body = $('Webhook Trigger').first().json.body || {}\nconst apiKey    = (body.apiKey || body.api_key || '').trim()\nconst keyword   = (body.keyword  || '').trim()\nconst location  = (body.location || '').trim()\nconst userEmail = (body.email    || '').trim()\n\nconst today = new Date().toISOString().split('T')[0] // \"YYYY-MM-DD\"\n\n// Guard: must have a key\nif (!apiKey) {\n  return [{ json: { allowed: false, reason: 'missing_key', userEmail, keyword, location, apiKey: '' } }]\n}\n\n// Find matching row\nconst matchRow = allRows.find(r => (r.json.api_key || '').trim() === apiKey)\n\nif (!matchRow) {\n  return [{ json: { allowed: false, reason: 'invalid_key', userEmail, keyword, location, apiKey } }]\n}\n\nconst row = matchRow.json\n\n// Check if key is active\nconst isActive = (row.active || '').toString().toLowerCase().trim() === 'yes'\nif (!isActive) {\n  return [{ json: { allowed: false, reason: 'inactive_key', userEmail, keyword, location, apiKey } }]\n}\n\n// Daily limit check (reset count if last_reset is before today)\nconst limit      = parseInt(row.daily_limit) || 5\nconst lastReset  = (row.last_reset || '').trim()\nconst isNewDay   = !lastReset || lastReset < today\nconst currentCnt = isNewDay ? 0 : parseInt(row.daily_count) || 0\nconst newCount   = currentCnt + 1\n\nif (newCount > limit) {\n  return [{\n    json: {\n      allowed: false,\n      reason: 'rate_limited',\n      userEmail, keyword, location, apiKey,\n      remaining: 0,\n      resetDate: today  // they can try again tomorrow\n    }\n  }]\n}\n\nreturn [{\n  json: {\n    allowed: true,\n    apiKey,\n    newCount,\n    today,\n    keyword,\n    location,\n    userEmail,\n    remaining: limit - newCount\n  }\n}]\n"
+      },
+      "id": "d845f0d9-e3bc-4883-8ea9-9b4cd7d83c4b",
+      "name": "Validate & Check Rate Limit",
+      "type": "n8n-nodes-base.code",
+      "position": [7296, 2416],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-allowed-v4-001",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "leftValue": "={{ $json.allowed }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f84609b6-9b89-4504-bc6e-74fb21eb4458",
+      "name": "IF: Key Valid & Not Rate Limited",
+      "type": "n8n-nodes-base.if",
+      "position": [7536, 2416],
+      "typeVersion": 2.1
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw",
+          "mode": "list",
+          "cachedResultName": "n8n Data sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 878241883,
+          "mode": "list",
+          "cachedResultName": "API KEYS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit#gid=878241883"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "api_key": "={{ $json.apiKey }}",
+            "daily_count": "={{ $json.newCount }}",
+            "last_reset": "={{ $json.today }}",
+            "row_number": 0
+          },
+          "matchingColumns": ["api_key"],
+          "schema": [
+            {
+              "id": "api_key",
+              "displayName": "api_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "owner",
+              "displayName": "owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "daily_limit",
+              "displayName": "daily_limit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "daily_count",
+              "displayName": "daily_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_reset",
+              "displayName": "last_reset",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "active",
+              "displayName": "active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "8b78ab60-92ea-49a1-8ea4-fdf4df0b77b1",
+      "name": "Update Usage Count",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [7776, 2304],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3yNBC63ijTtfDEDM",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "host1@baselearner.fun",
+        "toEmail": "={{ $json.userEmail }}",
+        "subject": "Lead Generator — Request Not Processed",
+        "html": "=<html><body style=\\\"font-family:sans-serif;max-width:520px;margin:40px auto\\\"><h2>Request Not Processed</h2><p>{{ $json.reason === 'rate_limited' ? 'You have used all <strong>5 daily requests</strong> for your API key. Resets at midnight UTC — try again tomorrow.' : 'Your API key is <strong>invalid or inactive</strong>. Contact the administrator.' }}</p><hr><p style=\\\"color:#888;font-size:12px\\\">Lead Generator — automated message.</p></body></html>",
+        "options": {}
+      },
+      "id": "711d9d02-a193-4695-8818-bfdf60e546c5",
+      "name": "Send Rate Limit Email",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [7776, 2560],
+      "typeVersion": 2.1,
+      "webhookId": "82ace4eb-1382-42b5-a6e4-dc4d78de071e",
+      "credentials": {
+        "smtp": {
+          "id": "7SXIjQEkfuxSte4I",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Validate & Check Rate Limit').first().json.keyword + ' in ' + $('Validate & Check Rate Limit').first().json.location }}",
+        "options": {
+          "systemMessage": "You are a lead generation assistant.\n\nYou will receive a message in the format \"keyword in City\" (e.g. \"dentist in New York\").\n\nGenerate exactly 10 search queries for real, distinct sub-areas or micro-neighbourhoods of that city, paired with the keyword.\n\nReturn ONLY a valid JSON array — no explanation, no markdown code blocks, no extra text before or after:\n[{\"query\":\"neighbourhood+keyword\"},{\"query\":\"area+keyword\"},...]\n\nRules:\n- Replace spaces with + in every query value\n- Put the keyword at the END of each query string\n- Use real, distinct neighbourhoods or districts of the given city\n- Generate exactly 10 items"
+        }
+      },
+      "id": "d3f7d826-a260-42fe-a073-d59bdcdcfe93",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [8016, 2304],
+      "typeVersion": 1.8
+    },
+    {
+      "parameters": {
+        "jsCode": "// Agent output is in $json.output as a string\nconst raw = ($input.first().json.output || '').trim()\n\n// Strip markdown code fences if the model wraps output in ```json ... ```\nconst cleaned = raw\n  .replace(/^```json\\s*/i, '')\n  .replace(/^```\\s*/i,     '')\n  .replace(/```\\s*$/i,     '')\n  .trim()\n\n// Extract the JSON array\nconst match = cleaned.match(/\\[[\\s\\S]*\\]/)\nif (!match) return []\n\nlet queries\ntry { queries = JSON.parse(match[0]) } catch (e) { return [] }\nif (!Array.isArray(queries)) return []\n\n// Normalise — each item must be { query: \"...\" }\nreturn queries\n  .filter(q => q && (typeof q === 'string' || typeof q.query === 'string'))\n  .map(q => ({ json: { query: typeof q === 'string' ? q : q.query } }))\n"
+      },
+      "id": "02c44f66-3842-44c2-b399-d0fd21e5938b",
+      "name": "Parse Queries",
+      "type": "n8n-nodes-base.code",
+      "position": [8256, 2304],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://google.serper.dev/maps",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.query }}"
+            },
+            {
+              "name": "num",
+              "value": "20"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 4,
+              "batchInterval": 1200
+            }
+          }
+        }
+      },
+      "id": "ee1b93cb-962a-493e-8677-49d5495716ed",
+      "name": "Search Google Maps via Serper",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [8496, 2304],
+      "typeVersion": 4.2,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "px4wVnZ3YuPR6GPM",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "places",
+        "options": {}
+      },
+      "id": "fd1caec6-a192-4841-b9b1-8e36ef211478",
+      "name": "Split Out Places",
+      "type": "n8n-nodes-base.splitOut",
+      "position": [8736, 2304],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-website-v4-001",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              },
+              "leftValue": "={{ $json.website || '' }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fa2704ee-19c1-4cea-a345-1f5e06f566c3",
+      "name": "Filter: Has Website",
+      "type": "n8n-nodes-base.filter",
+      "position": [8976, 2304],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "compare": "selectedFields",
+        "fieldsToCompare": "website",
+        "options": {}
+      },
+      "id": "cdb38a7e-c7b7-44d2-a190-2d165f0f35fa",
+      "name": "Remove Duplicate Websites",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "position": [9216, 2304],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.website }}",
+        "options": {}
+      },
+      "id": "f9ede7ff-fcbd-42b8-a6a9-8f4fa4e12eb2",
+      "name": "Fetch Business Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [9456, 2304],
+      "typeVersion": 4.2,
+      "alwaysOutputData": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Truncate immediately — real contact emails are in the first ~100KB.\n// Full pages can be 3–5 MB of minified JS; running a global regex on that hangs the runner.\nlet html = ($json.data || '').slice(0, 120_000)\n\n// Strip <script> and <style> blocks (indexOf approach — no regex backtracking risk)\nlet pos\nwhile ((pos = html.toLowerCase().indexOf('<script')) !== -1) {\n  const end = html.toLowerCase().indexOf('<\\/script>', pos)\n  if (end === -1) { html = html.slice(0, pos); break }\n  html = html.slice(0, pos) + ' ' + html.slice(end + 9)\n}\nwhile ((pos = html.toLowerCase().indexOf('<style')) !== -1) {\n  const end = html.toLowerCase().indexOf('<\\/style>', pos)\n  if (end === -1) { html = html.slice(0, pos); break }\n  html = html.slice(0, pos) + ' ' + html.slice(end + 8)\n}\n\nconst emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.(?!png|jpg|gif|jpeg|svg|webp)[a-zA-Z]{2,}/g\n\n// Cap at 50 emails per page — prevents downstream item explosion\nconst emails = (html.match(emailRegex) || []).slice(0, 50)\n\nreturn { json: { emails } }\n"
+      },
+      "id": "60a5826c-b205-4e8f-a699-65ba13aeb4fe",
+      "name": "Extract Emails From Page",
+      "type": "n8n-nodes-base.code",
+      "position": [9696, 2304],
+      "typeVersion": 2,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-has-emails-v4-001",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              },
+              "leftValue": "={{ $json.emails.length }}",
+              "rightValue": 0
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9b65b488-87b9-48da-bdb1-0f755bec68b1",
+      "name": "Filter: Has Emails",
+      "type": "n8n-nodes-base.filter",
+      "position": [9936, 2304],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "emails",
+        "options": {}
+      },
+      "id": "d3c8fa5c-d49a-4b6d-afcd-abec7ed20a65",
+      "name": "Split Out Emails",
+      "type": "n8n-nodes-base.splitOut",
+      "position": [10176, 2304],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "compare": "selectedFields",
+        "fieldsToCompare": "emails",
+        "options": {}
+      },
+      "id": "fd31c9dc-2473-4910-a775-45d1840a1b87",
+      "name": "Remove Duplicate Emails",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "position": [10416, 2304],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-no-spam-v4-001",
+              "operator": {
+                "type": "string",
+                "operation": "notRegex"
+              },
+              "leftValue": "={{ $json.emails }}",
+              "rightValue": "(google|gstatic|ggpht|schema\\.org|example\\.com|sentry\\.io|wixpress\\.com|noreply|no-reply|@wix\\.)"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "29fd91b5-bd6d-4988-926a-93f77f2484d3",
+      "name": "Filter Spam Emails",
+      "type": "n8n-nodes-base.filter",
+      "position": [10656, 2304],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "emails"
+            }
+          ]
+        },
+        "options": {
+          "mergeLists": false
+        }
+      },
+      "id": "2146dfc4-c9cd-4c3e-880c-6711cfcb7f4b",
+      "name": "Aggregate All Emails",
+      "type": "n8n-nodes-base.aggregate",
+      "position": [10896, 2304],
+      "typeVersion": 1,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const emails = Array.isArray($json.emails) ? $json.emails : []\n\n// Back-reference original request context from the validation node\nconst ctx       = $('Validate & Check Rate Limit').first().json\nconst keyword   = ctx.keyword   || ''\nconst location  = ctx.location  || ''\nconst userEmail = ctx.userEmail || ''\nconst remaining = ctx.remaining !== undefined ? ctx.remaining : '?'\n\nconst subject = `Lead Generation Results: ${keyword} in ${location}`\n\nif (emails.length === 0) {\n  return {\n    json: {\n      toEmail: userEmail,\n      subject,\n      emailBody: `<html><body style=\"font-family:sans-serif;max-width:580px;margin:40px auto\">\n<h2>Lead Generation Complete</h2>\n<p><strong>Keyword:</strong> ${keyword}<br><strong>Location:</strong> ${location}</p>\n<p>No email addresses were found for this search. Try a different keyword or a more populated location.</p>\n<p style=\"color:#888\">Requests remaining today: ${remaining}</p>\n</body></html>`\n    }\n  }\n}\n\nconst cap   = 500\nconst shown = emails.slice(0, cap)\nconst more  = emails.length > cap\n  ? `<p><em>Showing first ${cap} of ${emails.length} results.</em></p>` : ''\n\nconst list = shown.map(e => `<li style=\"font-family:monospace;margin:2px 0\">${e}</li>`).join('\\n')\n\nreturn {\n  json: {\n    toEmail: userEmail,\n    subject,\n    emailBody: `<html><body style=\"font-family:sans-serif;max-width:580px;margin:40px auto\">\n<h2>Lead Generation Results</h2>\n<table style=\"border-collapse:collapse;margin-bottom:16px\">\n  <tr><td style=\"padding:4px 12px 4px 0;font-weight:bold\">Keyword</td><td>${keyword}</td></tr>\n  <tr><td style=\"padding:4px 12px 4px 0;font-weight:bold\">Location</td><td>${location}</td></tr>\n  <tr><td style=\"padding:4px 12px 4px 0;font-weight:bold\">Emails Found</td><td><strong>${emails.length}</strong></td></tr>\n  <tr><td style=\"padding:4px 12px 4px 0;font-weight:bold\">Remaining Today</td><td>${remaining} of 5 requests</td></tr>\n</table>\n${more}\n<h3>Email Addresses</h3>\n<ul style=\"line-height:1.9;padding-left:20px\">\n${list}\n</ul>\n<hr style=\"margin-top:40px\">\n<p style=\"color:#aaa;font-size:12px\">Lead Generator &mdash; automated message.</p>\n</body></html>`\n  }\n}\n"
+      },
+      "id": "5230bf32-5341-4e45-8f2f-5eb36825aebc",
+      "name": "Format Email Body",
+      "type": "n8n-nodes-base.code",
+      "position": [11136, 2304],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "fromEmail": "host1@baselearner.fun",
+        "toEmail": "={{ $json.toEmail }}",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.emailBody }}",
+        "options": {}
+      },
+      "id": "34c8c49b-a5aa-45be-9be0-4600b3169b48",
+      "name": "Send Results Email",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [11376, 2304],
+      "typeVersion": 2.1,
+      "webhookId": "214a044e-5c38-472f-aa08-f6eecb17f553",
+      "credentials": {
+        "smtp": {
+          "id": "7SXIjQEkfuxSte4I",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [7984, 2512],
+      "id": "a6fdd5c4-13fb-4251-8af4-a81717ce6cdf",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "uQKAaZsBCZc8tSsG",
+          "name": "OpenAI account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read API Keys",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read API Keys": {
+      "main": [
+        [
+          {
+            "node": "Validate & Check Rate Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Check Rate Limit": {
+      "main": [
+        [
+          {
+            "node": "IF: Key Valid & Not Rate Limited",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Key Valid & Not Rate Limited": {
+      "main": [
+        [
+          {
+            "node": "Update Usage Count",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Rate Limit Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Usage Count": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Queries": {
+      "main": [
+        [
+          {
+            "node": "Search Google Maps via Serper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Google Maps via Serper": {
+      "main": [
+        [
+          {
+            "node": "Split Out Places",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Places": {
+      "main": [
+        [
+          {
+            "node": "Filter: Has Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Has Website": {
+      "main": [
+        [
+          {
+            "node": "Remove Duplicate Websites",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Duplicate Websites": {
+      "main": [
+        [
+          {
+            "node": "Fetch Business Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Business Website": {
+      "main": [
+        [
+          {
+            "node": "Extract Emails From Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Emails From Page": {
+      "main": [
+        [
+          {
+            "node": "Filter: Has Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Has Emails": {
+      "main": [
+        [
+          {
+            "node": "Split Out Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Emails": {
+      "main": [
+        [
+          {
+            "node": "Remove Duplicate Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Duplicate Emails": {
+      "main": [
+        [
+          {
+            "node": "Filter Spam Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Spam Emails": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate All Emails": {
+      "main": [
+        [
+          {
+            "node": "Format Email Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Email Body": {
+      "main": [
+        [
+          {
+            "node": "Send Results Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b851729c4f05012fd2520a7100cb43771808c7f8bbf8d626a72f677e956f6878"
+  }
+}

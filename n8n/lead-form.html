@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lead Generator</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f4f6f9;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #1a1a2e;
+        padding: 24px;
+      }
+
+      .card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+        padding: 40px;
+        width: 100%;
+        max-width: 480px;
+      }
+
+      .logo {
+        font-size: 28px;
+        margin-bottom: 6px;
+      }
+
+      h1 {
+        font-size: 22px;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+
+      .subtitle {
+        color: #666;
+        font-size: 14px;
+        margin-bottom: 28px;
+        line-height: 1.5;
+      }
+
+      .field {
+        margin-bottom: 18px;
+      }
+
+      label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: #444;
+        margin-bottom: 6px;
+      }
+
+      input {
+        width: 100%;
+        padding: 10px 14px;
+        border: 1.5px solid #dde0e7;
+        border-radius: 8px;
+        font-size: 15px;
+        outline: none;
+        transition: border-color 0.15s;
+        background: #fafbfc;
+      }
+
+      input:focus {
+        border-color: #4f46e5;
+        background: #fff;
+      }
+
+      input::placeholder {
+        color: #aaa;
+      }
+
+      .hint {
+        font-size: 12px;
+        color: #888;
+        margin-top: 4px;
+      }
+
+      button[type="submit"] {
+        width: 100%;
+        padding: 12px;
+        background: #4f46e5;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 8px;
+        transition:
+          background 0.15s,
+          opacity 0.15s;
+      }
+
+      button[type="submit"]:hover {
+        background: #4338ca;
+      }
+      button[type="submit"]:active {
+        background: #3730a3;
+      }
+      button[type="submit"]:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .status {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 1.5;
+        display: none;
+      }
+
+      .status.pending {
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+      }
+      .status.success {
+        background: #f0fdf4;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+      }
+      .status.error {
+        background: #fef2f2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+      }
+      .status.show {
+        display: block;
+      }
+
+      footer {
+        margin-top: 28px;
+        font-size: 12px;
+        color: #bbb;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="logo">🔍</div>
+      <h1>Lead Generator</h1>
+      <p class="subtitle">
+        Enter a keyword and location to find business email addresses from
+        Google Maps. Results will be sent to your email in ~2 minutes.
+      </p>
+
+      <form id="leadForm" novalidate>
+        <div class="field">
+          <label for="apiKey">API Key</label>
+          <input
+            type="password"
+            id="apiKey"
+            name="apiKey"
+            placeholder="Your access key"
+            autocomplete="current-password"
+            required
+          />
+        </div>
+
+        <div class="field">
+          <label for="keyword">Keyword</label>
+          <input
+            type="text"
+            id="keyword"
+            name="keyword"
+            placeholder="e.g. dentist, electronics, restaurant"
+            required
+          />
+          <p class="hint">The type of business you want to find leads for.</p>
+        </div>
+
+        <div class="field">
+          <label for="location">Location</label>
+          <input
+            type="text"
+            id="location"
+            name="location"
+            placeholder="e.g. New York, Lagos, London"
+            required
+          />
+          <p class="hint">
+            City or region to search in. 10 sub-areas will be generated
+            automatically.
+          </p>
+        </div>
+
+        <div class="field">
+          <label for="email">Your Email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            placeholder="you@example.com"
+            required
+          />
+          <p class="hint">
+            Results will be emailed here when the search completes.
+          </p>
+        </div>
+
+        <button type="submit" id="submitBtn">Generate Leads →</button>
+
+        <div class="status" id="statusMsg"></div>
+      </form>
+
+      <footer>Up to 5 requests per API key per day.</footer>
+    </div>
+
+    <script>
+      // ─── CONFIGURE THIS ───────────────────────────────────────────────────────
+      // Replace with your n8n webhook URL (active mode, not test mode)
+      const WEBHOOK_URL = "https://n8n.devchi.cloud/webhook/lead-generation";
+      // ──────────────────────────────────────────────────────────────────────────
+
+      const form = document.getElementById("leadForm");
+      const statusEl = document.getElementById("statusMsg");
+      const submitBtn = document.getElementById("submitBtn");
+
+      function showStatus(type, html) {
+        statusEl.className = `status ${type} show`;
+        statusEl.innerHTML = html;
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const apiKey = document.getElementById("apiKey").value.trim();
+        const keyword = document.getElementById("keyword").value.trim();
+        const location = document.getElementById("location").value.trim();
+        const email = document.getElementById("email").value.trim();
+
+        // Basic client-side validation
+        if (!apiKey || !keyword || !location || !email) {
+          showStatus("error", "⚠️ All fields are required.");
+          return;
+        }
+
+        submitBtn.disabled = true;
+        showStatus("pending", "⏳ Submitting your request…");
+
+        try {
+          const res = await fetch(WEBHOOK_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ apiKey, keyword, location, email }),
+          });
+
+          // n8n responds with 202 immediately (workflow continues in background)
+          if (res.status === 202 || res.ok) {
+            showStatus(
+              "success",
+              `✅ <strong>Request submitted!</strong><br>` +
+                `We're searching for <em>${keyword}</em> leads in <em>${location}</em>. ` +
+                `Results will arrive at <strong>${email}</strong> in approximately 2 minutes.`,
+            );
+            form.reset();
+          } else {
+            throw new Error(`Unexpected status: ${res.status}`);
+          }
+        } catch (err) {
+          showStatus(
+            "error",
+            `❌ <strong>Failed to submit.</strong><br>` +
+              `Check that the webhook URL is correct and the workflow is active. (${err.message})`,
+          );
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
