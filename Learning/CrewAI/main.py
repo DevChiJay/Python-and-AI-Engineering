@@ -1,6 +1,6 @@
 from crewai import Crew, Process
-from agents import senior_researcher, script_writer
-from tasks import research_task, script_task
+from Learning.CrewAI.agents import senior_researcher, script_writer
+from Learning.CrewAI.tasks import research_task, script_task
 
 # Create Crew
 crew = Crew(

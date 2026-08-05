@@ -1,5 +1,5 @@
 from crewai import Task
-from agents import senior_researcher, script_writer
+from Learning.CrewAI.agents import senior_researcher, script_writer
 
 # Research Task
 research_task = Task(
