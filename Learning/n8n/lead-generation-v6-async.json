@@ -1,0 +1,979 @@
+{
+  "name": "Lead Generator v6 — Serper + Multi-Page Email Crawl, No SMTP",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## ⚙️ One-time Setup\n\n**1. Sheets to create** (same spreadsheet as before)\n- `API Keys` tab (unchanged from v4/v5): `api_key | owner | daily_limit | daily_count | last_reset | active`\n- **NEW** `Jobs` tab: `job_id | status | keyword | location | total_written | created_at`\n- **NEW** `Leads` tab: `job_id | business_name | phone | website | address | email | created_at`\n\n**2. Credentials**\n- Google Sheets (reuse existing)\n- Serper.dev Header Auth (reuse existing, `X-API-KEY`)\n- OpenAI or Gemini (reuse existing, for sub-area query generation only — no qualification/scoring)\n- ❌ No SMTP needed anymore\n\n**3. Two webhooks, both must be Active**\n- `POST /lead-generation` — submits a search, returns `{ jobId, allowed, reason }` immediately\n- `GET /lead-status?jobId=...` — polled by the frontend every few seconds until `status: \"done\"`\n\n**4. Why this replaced email delivery**\nSMTP added a dependency and a delay. The frontend now polls for results directly and offers a client-side download (JSON/TXT) — no email server, no deliverability risk, instant on-page results.",
+        "height": 420,
+        "width": 760,
+        "color": 7
+      },
+      "id": "v6-0001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [0, 0],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## 📈 Why the email hit-rate was only ~10%\n\nv4/v5 only checked the **homepage**. Most businesses put contact emails on `/contact` or `/about` instead. This version crawls up to 3 pages per business (home, /contact, /about) and keeps the first real email found — roughly doubling to tripling hit rate at near-zero extra cost (just more HTTP fetches, no paid API involved).\n\n## 💵 Real cost math (Serper Starter tier, $50 = 50,000 queries)\n- 1 query ≈ $0.001\n- 25 queries/day (≈200 leads each ≈ 5,000 leads/day) ≈ $0.025/day ≈ **$0.75/month**\n- The 5/sec rate-limit error you hit earlier was the **free trial tier**. Starter tier raises that to 50/sec.",
+        "height": 260,
+        "width": 620,
+        "color": 4
+      },
+      "id": "v6-0002",
+      "name": "Cost & Coverage Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [800, 0],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-generation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "v6-0003",
+      "name": "Submit Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [280, 440],
+      "typeVersion": 2,
+      "webhookId": "lead-gen-v6-submit"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw",
+          "mode": "list",
+          "cachedResultName": "n8n Data sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 878241883,
+          "mode": "list",
+          "cachedResultName": "API KEYS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit#gid=878241883"
+        },
+        "options": {}
+      },
+      "id": "v6-0004",
+      "name": "Read API Keys",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [520, 440],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3yNBC63ijTtfDEDM",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const allRows = $input.all()\nconst body = $('Submit Webhook').first().json.body || {}\nconst apiKey   = (body.apiKey || body.api_key || '').trim()\nconst keyword  = (body.keyword  || '').trim()\nconst location = (body.location || '').trim()\n\nconst today  = new Date().toISOString().split('T')[0]\nconst jobId  = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID()\n             : `${Date.now()}-${Math.random().toString(36).slice(2)}`\n\nif (!apiKey) {\n  return [{ json: { allowed: false, reason: 'missing_key', jobId, keyword, location } }]\n}\n\nconst matchRow = allRows.find(r => (r.json.api_key || '').trim() === apiKey)\nif (!matchRow) {\n  return [{ json: { allowed: false, reason: 'invalid_key', jobId, keyword, location } }]\n}\n\nconst row = matchRow.json\nconst isActive = (row.active || '').toString().toLowerCase().trim() === 'yes'\nif (!isActive) {\n  return [{ json: { allowed: false, reason: 'inactive_key', jobId, keyword, location } }]\n}\n\nconst limit      = parseInt(row.daily_limit) || 5\nconst lastReset  = (row.last_reset || '').trim()\nconst isNewDay   = !lastReset || lastReset < today\nconst currentCnt = isNewDay ? 0 : parseInt(row.daily_count) || 0\nconst newCount   = currentCnt + 1\n\nif (newCount > limit) {\n  return [{ json: { allowed: false, reason: 'rate_limited', jobId, keyword, location, remaining: 0 } }]\n}\n\nreturn [{\n  json: {\n    allowed: true, apiKey, newCount, today, keyword, location, jobId,\n    remaining: limit - newCount\n  }\n}]\n"
+      },
+      "id": "v6-0005",
+      "name": "Validate & Check Rate Limit",
+      "type": "n8n-nodes-base.code",
+      "position": [760, 440],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { jobId: $json.jobId, allowed: $json.allowed, reason: $json.reason || null, remaining: $json.remaining !== undefined ? $json.remaining : null } }}",
+        "options": {}
+      },
+      "id": "v6-0006",
+      "name": "Respond Immediately",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [1000, 240],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "v6-cond-allowed",
+              "operator": { "type": "boolean", "operation": "true" },
+              "leftValue": "={{ $json.allowed }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "v6-0007",
+      "name": "IF: Key Valid & Not Rate Limited",
+      "type": "n8n-nodes-base.if",
+      "position": [1000, 440],
+      "typeVersion": 2.1
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw",
+          "mode": "list",
+          "cachedResultName": "n8n Data sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 878241883,
+          "mode": "list",
+          "cachedResultName": "API KEYS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit#gid=878241883"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "api_key": "={{ $json.apiKey }}",
+            "daily_count": "={{ $json.newCount }}",
+            "last_reset": "={{ $json.today }}"
+          },
+          "matchingColumns": ["api_key"],
+          "schema": [
+            {
+              "id": "api_key",
+              "displayName": "api_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "owner",
+              "displayName": "owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "daily_limit",
+              "displayName": "daily_limit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "daily_count",
+              "displayName": "daily_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_reset",
+              "displayName": "last_reset",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "active",
+              "displayName": "active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "v6-0008",
+      "name": "Update Usage Count",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [1240, 400],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3yNBC63ijTtfDEDM",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw",
+          "mode": "list",
+          "cachedResultName": "n8n Data sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit?usp=drivesdk"
+        },
+        "sheetName": { "__rl": true, "value": "Jobs", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $('Validate & Check Rate Limit').item.json.jobId }}",
+            "status": "processing",
+            "keyword": "={{ $('Validate & Check Rate Limit').item.json.keyword }}",
+            "location": "={{ $('Validate & Check Rate Limit').item.json.location }}",
+            "total_written": "0",
+            "created_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "job_id",
+              "displayName": "job_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "keyword",
+              "displayName": "keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "total_written",
+              "displayName": "total_written",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "v6-0009",
+      "name": "Create Job Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [1480, 400],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3yNBC63ijTtfDEDM",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Validate & Check Rate Limit').first().json.keyword + ' in ' + $('Validate & Check Rate Limit').first().json.location }}",
+        "options": {
+          "systemMessage": "You are a lead generation assistant.\n\nYou will receive a message in the format \"keyword in City\" (e.g. \"dentist in New York\").\n\nGenerate exactly 25 search queries for real, distinct sub-areas or micro-neighbourhoods of that city, paired with the keyword.\n\nReturn ONLY a valid JSON array — no explanation, no markdown code blocks, no extra text before or after:\n[{\"query\":\"neighbourhood+keyword\"},{\"query\":\"area+keyword\"},...]\n\nRules:\n- Replace spaces with + in every query value\n- Put the keyword at the END of each query string\n- Use real, distinct neighbourhoods or districts of the given city\n- Generate exactly 25 items"
+        }
+      },
+      "id": "v6-0010",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [1720, 400],
+      "typeVersion": 1.8
+    },
+    {
+      "parameters": {
+        "model": { "__rl": true, "mode": "list", "value": "gpt-5-mini" },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "v6-0011",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [1720, 600],
+      "typeVersion": 1.3,
+      "credentials": {
+        "openAiApi": { "id": "uQKAaZsBCZc8tSsG", "name": "OpenAI account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = ($input.first().json.output || '').trim()\nconst cleaned = raw.replace(/^```json\\s*/i, '').replace(/^```\\s*/i, '').replace(/```\\s*$/i, '').trim()\nconst match = cleaned.match(/\\[[\\s\\S]*\\]/)\nif (!match) return []\nlet queries\ntry { queries = JSON.parse(match[0]) } catch (e) { return [] }\nif (!Array.isArray(queries)) return []\nreturn queries\n  .filter(q => q && (typeof q === 'string' || typeof q.query === 'string'))\n  .map(q => ({ json: { query: typeof q === 'string' ? q : q.query } }))\n"
+      },
+      "id": "v6-0012",
+      "name": "Parse Queries",
+      "type": "n8n-nodes-base.code",
+      "position": [1960, 400],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://google.serper.dev/maps",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "q", "value": "={{ $json.query }}" },
+            { "name": "num", "value": "100" }
+          ]
+        },
+        "options": {
+          "batching": { "batch": { "batchSize": 10, "batchInterval": 250 } }
+        }
+      },
+      "id": "v6-0013",
+      "name": "Search Google Maps via Serper",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [2200, 400],
+      "typeVersion": 4.2,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "px4wVnZ3YuPR6GPM",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": { "fieldToSplitOut": "places", "options": {} },
+      "id": "v6-0014",
+      "name": "Split Out Places",
+      "type": "n8n-nodes-base.splitOut",
+      "position": [2440, 400],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const p = item.json\n  const website = (p.website || '').trim()\n  const dedupeKey = website || `${(p.title || '').trim()}|${(p.address || '').trim()}`\n  return { json: {\n    dedupeKey,\n    business_name: p.title || '',\n    phone: p.phoneNumber || p.phone || '',\n    website,\n    address: p.address || ''\n  } }\n})\n"
+      },
+      "id": "v6-0015",
+      "name": "Normalize Business Fields",
+      "type": "n8n-nodes-base.code",
+      "position": [2680, 400],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "compare": "selectedFields",
+        "fieldsToCompare": "dedupeKey",
+        "options": {}
+      },
+      "id": "v6-0016",
+      "name": "Remove Duplicate Businesses",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "position": [2920, 400],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = []\nfor (const item of $input.all()) {\n  const b = item.json\n  if (!b.website) {\n    results.push({ json: { ...b, candidateUrl: null } })\n    continue\n  }\n  const base = b.website.replace(/\\/$/, '')\n  const paths = ['', '/contact', '/contact-us', '/about']\n  for (const p of paths) {\n    results.push({ json: { ...b, candidateUrl: base + p } })\n  }\n}\nreturn results\n"
+      },
+      "id": "v6-0017",
+      "name": "Generate Candidate URLs",
+      "type": "n8n-nodes-base.code",
+      "position": [3160, 400],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "v6-cond-has-url",
+              "operator": { "type": "string", "operation": "notEmpty" },
+              "leftValue": "={{ $json.candidateUrl || '' }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "v6-0018",
+      "name": "IF: Has Candidate URL",
+      "type": "n8n-nodes-base.filter",
+      "position": [3400, 320],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.candidateUrl }}",
+        "options": { "timeout": 8000 }
+      },
+      "id": "v6-0019",
+      "name": "Fetch Candidate Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [3640, 320],
+      "typeVersion": 4.2,
+      "alwaysOutputData": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "let html = ($json.data || '').slice(0, 120_000)\nlet pos\nwhile ((pos = html.toLowerCase().indexOf('<script')) !== -1) {\n  const end = html.toLowerCase().indexOf('<\\/script>', pos)\n  if (end === -1) { html = html.slice(0, pos); break }\n  html = html.slice(0, pos) + ' ' + html.slice(end + 9)\n}\nwhile ((pos = html.toLowerCase().indexOf('<style')) !== -1) {\n  const end = html.toLowerCase().indexOf('<\\/style>', pos)\n  if (end === -1) { html = html.slice(0, pos); break }\n  html = html.slice(0, pos) + ' ' + html.slice(end + 8)\n}\n\nconst emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.(?!png|jpg|gif|jpeg|svg|webp)[a-zA-Z]{2,}/g\nconst junk = /(google|gstatic|ggpht|schema\\.org|example\\.com|sentry\\.io|wixpress\\.com|@wix\\.)/i\nconst found = (html.match(emailRegex) || []).filter(e => !junk.test(e))\n\n// HTTP Request node replaces $json with the response, so pull business fields back from the upstream node\nconst orig = $('Generate Candidate URLs').item.json\nreturn { json: { ...orig, emails: found } }\n"
+      },
+      "id": "v6-0020",
+      "name": "Extract Email From Page",
+      "type": "n8n-nodes-base.code",
+      "position": [3880, 320],
+      "typeVersion": 2,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "v6-cond-no-url",
+              "operator": { "type": "string", "operation": "empty" },
+              "leftValue": "={{ $json.candidateUrl || '' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "v6-0021",
+      "name": "IF: No Website",
+      "type": "n8n-nodes-base.filter",
+      "position": [3400, 520],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "options": {}
+      },
+      "id": "v6-0022",
+      "name": "Merge Branches",
+      "type": "n8n-nodes-base.merge",
+      "position": [4120, 400],
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "jsCode": "const groups = new Map()\nfor (const item of $input.all()) {\n  const b = item.json\n  const key = b.dedupeKey\n  if (!groups.has(key)) {\n    groups.set(key, { business_name: b.business_name, phone: b.phone, website: b.website, address: b.address, email: '' })\n  }\n  const g = groups.get(key)\n  if (!g.email && Array.isArray(b.emails) && b.emails.length > 0) {\n    g.email = b.emails[0]\n  }\n}\nreturn Array.from(groups.values()).map(v => ({ json: v }))\n"
+      },
+      "id": "v6-0023",
+      "name": "Group & Pick Best Email",
+      "type": "n8n-nodes-base.code",
+      "position": [4360, 400],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw",
+          "mode": "list",
+          "cachedResultName": "n8n Data sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit?usp=drivesdk"
+        },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $('Validate & Check Rate Limit').first().json.jobId }}",
+            "business_name": "={{ $json.business_name }}",
+            "phone": "={{ $json.phone }}",
+            "website": "={{ $json.website }}",
+            "address": "={{ $json.address }}",
+            "email": "={{ $json.email }}",
+            "created_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "job_id",
+              "displayName": "job_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "business_name",
+              "displayName": "business_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "website",
+              "displayName": "website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "address",
+              "displayName": "address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": { "cellFormat": "RAW" }
+      },
+      "id": "v6-0024",
+      "name": "Append Leads to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [4600, 320],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3yNBC63ijTtfDEDM",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [{ "fieldToAggregate": "business_name" }]
+        },
+        "options": {}
+      },
+      "id": "v6-0025",
+      "name": "Count Leads",
+      "type": "n8n-nodes-base.aggregate",
+      "position": [4600, 520],
+      "typeVersion": 1,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw",
+          "mode": "list",
+          "cachedResultName": "n8n Data sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit?usp=drivesdk"
+        },
+        "sheetName": { "__rl": true, "value": "Jobs", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{ $('Validate & Check Rate Limit').first().json.jobId }}",
+            "status": "done",
+            "total_written": "={{ Array.isArray($json.business_name) ? $json.business_name.length : 0 }}"
+          },
+          "matchingColumns": ["job_id"],
+          "schema": [
+            {
+              "id": "job_id",
+              "displayName": "job_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "keyword",
+              "displayName": "keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "total_written",
+              "displayName": "total_written",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "v6-0026",
+      "name": "Mark Job Done",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [4840, 520],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3yNBC63ijTtfDEDM",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## 📡 Status/Poll Endpoint (separate trigger, same workflow)\n\nFrontend calls `GET /lead-status?jobId=...` every 3-5s. Returns `{ status, total_written, leads: [...] }`. When `status === 'done'`, stop polling and render the table + enable download buttons.",
+        "height": 160,
+        "width": 520,
+        "color": 5
+      },
+      "id": "v6-0027",
+      "name": "Poll Endpoint Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [280, 900],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "lead-status",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "v6-0028",
+      "name": "Status Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [280, 1040],
+      "typeVersion": 2,
+      "webhookId": "lead-gen-v6-status"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw",
+          "mode": "list",
+          "cachedResultName": "n8n Data sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit?usp=drivesdk"
+        },
+        "sheetName": { "__rl": true, "value": "Jobs", "mode": "name" },
+        "options": {}
+      },
+      "id": "v6-0029",
+      "name": "Read Jobs",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [520, 1040],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3yNBC63ijTtfDEDM",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw",
+          "mode": "list",
+          "cachedResultName": "n8n Data sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit?usp=drivesdk"
+        },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "options": {}
+      },
+      "id": "v6-0030",
+      "name": "Read Leads",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [520, 1200],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3yNBC63ijTtfDEDM",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "options": {}
+      },
+      "id": "v6-0031",
+      "name": "Merge Job + Leads",
+      "type": "n8n-nodes-base.merge",
+      "position": [760, 1120],
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "jsCode": "const jobId = $('Status Webhook').first().json.query.jobId || ''\n\nconst jobsInput   = $input.all()\nconst jobRow = jobsInput.find(i => (i.json.job_id || '') === jobId)\n\nif (!jobRow) {\n  return [{ json: { found: false, jobId } }]\n}\n\nconst leads = jobsInput\n  .filter(i => (i.json.job_id || '') === jobId && i.json.business_name !== undefined)\n  .map(i => ({\n    business_name: i.json.business_name,\n    phone: i.json.phone,\n    website: i.json.website,\n    address: i.json.address,\n    email: i.json.email\n  }))\n\nreturn [{\n  json: {\n    found: true,\n    jobId,\n    status: jobRow.json.status,\n    keyword: jobRow.json.keyword,\n    location: jobRow.json.location,\n    total_written: parseInt(jobRow.json.total_written) || 0,\n    leads\n  }\n}]\n"
+      },
+      "id": "v6-0032",
+      "name": "Build Status Response",
+      "type": "n8n-nodes-base.code",
+      "position": [1000, 1120],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "v6-0033",
+      "name": "Respond With Status",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [1240, 1120],
+      "typeVersion": 1.1
+    }
+  ],
+  "connections": {
+    "Submit Webhook": {
+      "main": [[{ "node": "Read API Keys", "type": "main", "index": 0 }]]
+    },
+    "Read API Keys": {
+      "main": [
+        [{ "node": "Validate & Check Rate Limit", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate & Check Rate Limit": {
+      "main": [
+        [
+          { "node": "Respond Immediately", "type": "main", "index": 0 },
+          {
+            "node": "IF: Key Valid & Not Rate Limited",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Key Valid & Not Rate Limited": {
+      "main": [
+        [{ "node": "Update Usage Count", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Update Usage Count": {
+      "main": [[{ "node": "Create Job Row", "type": "main", "index": 0 }]]
+    },
+    "Create Job Row": {
+      "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]
+      ]
+    },
+    "AI Agent": {
+      "main": [[{ "node": "Parse Queries", "type": "main", "index": 0 }]]
+    },
+    "Parse Queries": {
+      "main": [
+        [
+          {
+            "node": "Search Google Maps via Serper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Google Maps via Serper": {
+      "main": [[{ "node": "Split Out Places", "type": "main", "index": 0 }]]
+    },
+    "Split Out Places": {
+      "main": [
+        [{ "node": "Normalize Business Fields", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalize Business Fields": {
+      "main": [
+        [{ "node": "Remove Duplicate Businesses", "type": "main", "index": 0 }]
+      ]
+    },
+    "Remove Duplicate Businesses": {
+      "main": [
+        [{ "node": "Generate Candidate URLs", "type": "main", "index": 0 }]
+      ]
+    },
+    "Generate Candidate URLs": {
+      "main": [
+        [
+          { "node": "IF: Has Candidate URL", "type": "main", "index": 0 },
+          { "node": "IF: No Website", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "IF: Has Candidate URL": {
+      "main": [[{ "node": "Fetch Candidate Page", "type": "main", "index": 0 }]]
+    },
+    "Fetch Candidate Page": {
+      "main": [
+        [{ "node": "Extract Email From Page", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Email From Page": {
+      "main": [[{ "node": "Merge Branches", "type": "main", "index": 0 }]]
+    },
+    "IF: No Website": {
+      "main": [[{ "node": "Merge Branches", "type": "main", "index": 1 }]]
+    },
+    "Merge Branches": {
+      "main": [
+        [{ "node": "Group & Pick Best Email", "type": "main", "index": 0 }]
+      ]
+    },
+    "Group & Pick Best Email": {
+      "main": [
+        [
+          { "node": "Append Leads to Sheet", "type": "main", "index": 0 },
+          { "node": "Count Leads", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Count Leads": {
+      "main": [[{ "node": "Mark Job Done", "type": "main", "index": 0 }]]
+    },
+    "Status Webhook": {
+      "main": [
+        [
+          { "node": "Read Jobs", "type": "main", "index": 0 },
+          { "node": "Read Leads", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Read Jobs": {
+      "main": [[{ "node": "Merge Job + Leads", "type": "main", "index": 0 }]]
+    },
+    "Read Leads": {
+      "main": [[{ "node": "Merge Job + Leads", "type": "main", "index": 1 }]]
+    },
+    "Merge Job + Leads": {
+      "main": [
+        [{ "node": "Build Status Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Status Response": {
+      "main": [[{ "node": "Respond With Status", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "b851729c4f05012fd2520a7100cb43771808c7f8bbf8d626a72f677e956f6878"
+  }
+}

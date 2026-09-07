@@ -1,5 +1,4 @@
 crewai
-crewai-tools
 tweepy
 python-dotenv
 ddgs

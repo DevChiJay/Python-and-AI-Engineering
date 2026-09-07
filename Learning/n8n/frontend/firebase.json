@@ -1,0 +1,7 @@
+{
+  "hosting": {
+    "public": "public",
+    "target": "LeadAuto",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
+  }
+}

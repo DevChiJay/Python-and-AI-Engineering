@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "utility-9ecc0"
+  },
+  "targets": {
+    "utility-9ecc0": {
+      "hosting": {
+        "LeadAuto": [
+          "leadauto"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

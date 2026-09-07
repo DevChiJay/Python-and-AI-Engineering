@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lead Generator</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        min-height: 100vh;
+        background: #f4f6f9;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #1a1a2e;
+        padding: 24px;
+      }
+
+      .wrap {
+        max-width: 960px;
+        margin: 0 auto;
+      }
+
+      .card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+        padding: 40px;
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        font-size: 22px;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+      .subtitle {
+        color: #666;
+        font-size: 14px;
+        margin-bottom: 28px;
+        line-height: 1.5;
+      }
+
+      .field {
+        margin-bottom: 18px;
+      }
+      label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: #444;
+        margin-bottom: 6px;
+      }
+
+      input {
+        width: 100%;
+        padding: 10px 14px;
+        border: 1.5px solid #dde0e7;
+        border-radius: 8px;
+        font-size: 15px;
+        outline: none;
+        background: #fafbfc;
+      }
+      input:focus {
+        border-color: #4f46e5;
+        background: #fff;
+      }
+
+      button {
+        padding: 12px 20px;
+        background: #4f46e5;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #4338ca;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      button.secondary {
+        background: #eef0f7;
+        color: #333;
+        margin-right: 10px;
+      }
+      button.secondary:hover {
+        background: #dfe3ee;
+      }
+
+      .status {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border-radius: 8px;
+        font-size: 14px;
+        display: none;
+      }
+      .status.pending {
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+        display: block;
+      }
+      .status.error {
+        background: #fef2f2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+        display: block;
+      }
+      .status.success {
+        background: #f0fdf4;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+        display: block;
+      }
+
+      .results-card {
+        display: none;
+      }
+      .results-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th,
+      td {
+        padding: 8px 10px;
+        text-align: left;
+        border-bottom: 1px solid #eee;
+      }
+      th {
+        background: #f8f9fb;
+        font-weight: 600;
+      }
+      td.email {
+        font-family: monospace;
+      }
+      td.muted {
+        color: #aaa;
+      }
+
+      .table-scroll {
+        max-height: 480px;
+        overflow-y: auto;
+        border: 1px solid #eee;
+        border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>🔍 Lead Generator</h1>
+        <p class="subtitle">
+          Enter a keyword and location. Results appear on this page — no email
+          needed. Download as JSON or TXT when done.
+        </p>
+
+        <form id="leadForm" novalidate>
+          <div class="field">
+            <label for="apiKey">API Key</label>
+            <input
+              type="password"
+              id="apiKey"
+              name="apiKey"
+              placeholder="Your access key"
+              autocomplete="current-password"
+              required
+            />
+          </div>
+          <div class="field">
+            <label for="keyword">Keyword</label>
+            <input
+              type="text"
+              id="keyword"
+              name="keyword"
+              placeholder="e.g. dentist, electronics, restaurant"
+              required
+            />
+          </div>
+          <div class="field">
+            <label for="location">Location</label>
+            <input
+              type="text"
+              id="location"
+              name="location"
+              placeholder="e.g. New York, Lagos, London"
+              required
+            />
+          </div>
+          <button type="submit" id="submitBtn">Generate Leads →</button>
+          <div class="status" id="statusMsg"></div>
+        </form>
+      </div>
+
+      <div class="card results-card" id="resultsCard">
+        <div class="results-header">
+          <div id="resultsSummary" style="font-size: 14px; color: #555"></div>
+          <div>
+            <button class="secondary" id="downloadJsonBtn">
+              Download JSON
+            </button>
+            <button class="secondary" id="downloadTxtBtn">Download TXT</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Business Name</th>
+                <th>Phone</th>
+                <th>Website</th>
+                <th>Address</th>
+                <th>Email</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ─── CONFIGURE THESE ──────────────────────────────────────────────────────
+      const SUBMIT_URL = "https://n8n.devchi.me/webhook/lead-generation";
+      const STATUS_URL = "https://n8n.devchi.me/webhook/lead-status";
+      const POLL_INTERVAL_MS = 4000;
+      // ──────────────────────────────────────────────────────────────────────────
+
+      const form = document.getElementById("leadForm");
+      const statusEl = document.getElementById("statusMsg");
+      const submitBtn = document.getElementById("submitBtn");
+      const resultsCard = document.getElementById("resultsCard");
+      const resultsBody = document.getElementById("resultsBody");
+      const resultsSummary = document.getElementById("resultsSummary");
+
+      let currentLeads = [];
+      let currentMeta = {};
+      let pollTimer = null;
+      let notFoundCount = 0;
+      const MAX_NOT_FOUND_RETRIES = 3;
+
+      function showStatus(type, html) {
+        statusEl.className = `status ${type}`;
+        statusEl.innerHTML = html;
+      }
+
+      function renderResults(data) {
+        currentLeads = data.leads || [];
+        currentMeta = {
+          keyword: data.keyword,
+          location: data.location,
+          jobId: data.jobId,
+        };
+
+        resultsSummary.textContent =
+          `${currentLeads.length} businesses found for "${data.keyword}" in "${data.location}" ` +
+          `(${currentLeads.filter((l) => l.email).length} with email)`;
+
+        resultsBody.innerHTML = currentLeads
+          .map(
+            (l) => `
+      <tr>
+        <td>${escapeHtml(l.business_name || "")}</td>
+        <td>${escapeHtml(l.phone || "")}</td>
+        <td>${l.website ? `<a href="${escapeHtml(l.website)}" target="_blank" rel="noopener">${escapeHtml(l.website)}</a>` : ""}</td>
+        <td>${escapeHtml(l.address || "")}</td>
+        <td class="${l.email ? "email" : "muted"}">${escapeHtml(l.email || "—")}</td>
+      </tr>
+    `,
+          )
+          .join("");
+
+        resultsCard.style.display = "block";
+      }
+
+      function escapeHtml(str) {
+        const div = document.createElement("div");
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      function downloadBlob(content, filename, mime) {
+        const blob = new Blob([content], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      document
+        .getElementById("downloadJsonBtn")
+        .addEventListener("click", () => {
+          downloadBlob(
+            JSON.stringify(currentLeads, null, 2),
+            `leads-${currentMeta.jobId || "export"}.json`,
+            "application/json",
+          );
+        });
+
+      document
+        .getElementById("downloadTxtBtn")
+        .addEventListener("click", () => {
+          const lines = currentLeads.map(
+            (l) =>
+              `${l.business_name || ""}\t${l.phone || ""}\t${l.website || ""}\t${l.address || ""}\t${l.email || ""}`,
+          );
+          const header = "Business Name\tPhone\tWebsite\tAddress\tEmail";
+          downloadBlob(
+            [header, ...lines].join("\n"),
+            `leads-${currentMeta.jobId || "export"}.txt`,
+            "text/plain",
+          );
+        });
+
+      async function pollStatus(jobId) {
+        try {
+          const res = await fetch(
+            `${STATUS_URL}?jobId=${encodeURIComponent(jobId)}`,
+          );
+          const data = await res.json();
+
+          if (!data.found) {
+            // tolerate transient Sheets read-after-write lag before giving up
+            notFoundCount += 1;
+            if (notFoundCount > MAX_NOT_FOUND_RETRIES) {
+              showStatus("error", "❌ Job not found. It may have expired.");
+              clearInterval(pollTimer);
+              submitBtn.disabled = false;
+            }
+            return;
+          }
+          notFoundCount = 0;
+
+          showStatus(
+            "pending",
+            `⏳ Processing… ${data.total_written || 0} leads collected so far.`,
+          );
+
+          if (data.status === "done") {
+            clearInterval(pollTimer);
+            showStatus(
+              "success",
+              `✅ Done! ${data.total_written} leads found.`,
+            );
+            renderResults(data);
+            submitBtn.disabled = false;
+          }
+        } catch (err) {
+          showStatus("error", `❌ Error checking status: ${err.message}`);
+        }
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const apiKey = document.getElementById("apiKey").value.trim();
+        const keyword = document.getElementById("keyword").value.trim();
+        const location = document.getElementById("location").value.trim();
+
+        if (!apiKey || !keyword || !location) {
+          showStatus("error", "⚠️ All fields are required.");
+          return;
+        }
+
+        submitBtn.disabled = true;
+        resultsCard.style.display = "none";
+        notFoundCount = 0;
+        showStatus("pending", "⏳ Submitting your request…");
+
+        try {
+          const res = await fetch(SUBMIT_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ apiKey, keyword, location }),
+          });
+          const data = await res.json();
+
+          if (!data.allowed) {
+            const reasons = {
+              missing_key: "API key is required.",
+              invalid_key: "API key is invalid.",
+              inactive_key: "API key is inactive. Contact the administrator.",
+              rate_limited:
+                "You have used all daily requests for this key. Try again tomorrow.",
+            };
+            showStatus(
+              "error",
+              `❌ ${reasons[data.reason] || "Request not processed."}`,
+            );
+            submitBtn.disabled = false;
+            return;
+          }
+
+          showStatus(
+            "pending",
+            `⏳ Request accepted (job ${data.jobId}). Searching…`,
+          );
+          pollTimer = setInterval(
+            () => pollStatus(data.jobId),
+            POLL_INTERVAL_MS,
+          );
+          pollStatus(data.jobId);
+        } catch (err) {
+          showStatus("error", `❌ Failed to submit: ${err.message}`);
+          submitBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

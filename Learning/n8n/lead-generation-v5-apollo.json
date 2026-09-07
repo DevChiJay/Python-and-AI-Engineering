@@ -1,0 +1,376 @@
+{
+  "name": "Lead Generator v5 — Apollo.io Discovery Only",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## ⚙️ One-time Setup\n\n**1. Apollo.io**\n- Sign up at apollo.io → Settings → API → copy your API key\n- In n8n → Credentials → New → **Header Auth**\n  - Header Name: `X-Api-Key`\n  - Header Value: your Apollo API key\n- Bind on `Apollo People Search`\n- ⚠️ Apollo's free/starter plans only reveal emails for a limited number of contacts per month (credits). Locked emails come back masked (e.g. `email_not_unlocked@domain.com`) — these are filtered out automatically.\n\n**2. Google Sheets — API Keys tab** (unchanged from v4)\n`api_key` | `owner` | `daily_limit` | `daily_count` | `last_reset` | `active`\n\n**3. SMTP**\nBind on both email send nodes, set `fromEmail`.\n\n**4. Webhook URL**\nOnce Active: `https://YOUR_N8N_DOMAIN/webhook/lead-generation`\nUpdate `WEBHOOK_URL` in `lead-form.html`.",
+        "height": 460,
+        "width": 720,
+        "color": 7
+      },
+      "id": "b1000001-0000-4000-8000-000000000001",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [0, 0],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## 📊 Google Sheet Schema (unchanged)\n\n**Sheet name:** `API Keys`\n\n| api_key | owner | daily_limit | daily_count | last_reset | active |\n|---|---|---|---|---|---|\n| abc123xyz | Alice | 5 | 2 | 2026-07-08 | yes |\n\n`last_reset` uses `YYYY-MM-DD`. Resets automatically when a new day is detected.",
+        "height": 220,
+        "width": 560,
+        "color": 4
+      },
+      "id": "b1000001-0000-4000-8000-000000000002",
+      "name": "Sheet Schema",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [760, 0],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-generation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b1000001-0000-4000-8000-000000000003",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "position": [280, 400],
+      "typeVersion": 2,
+      "webhookId": "lead-gen-v5-webhook-001"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": { "responseCode": 202 }
+      },
+      "id": "b1000001-0000-4000-8000-000000000004",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [520, 200],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw",
+          "mode": "list",
+          "cachedResultName": "n8n Data sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 878241883,
+          "mode": "list",
+          "cachedResultName": "API KEYS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit#gid=878241883"
+        },
+        "options": {}
+      },
+      "id": "b1000001-0000-4000-8000-000000000005",
+      "name": "Read API Keys",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [520, 480],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3yNBC63ijTtfDEDM",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const allRows = $input.all()\nconst body = $('Webhook Trigger').first().json.body || {}\nconst apiKey    = (body.apiKey || body.api_key || '').trim()\nconst keyword   = (body.keyword  || '').trim()\nconst location  = (body.location || '').trim()\nconst userEmail = (body.email    || '').trim()\n\nconst today = new Date().toISOString().split('T')[0]\n\nif (!apiKey) {\n  return [{ json: { allowed: false, reason: 'missing_key', userEmail, keyword, location, apiKey: '' } }]\n}\n\nconst matchRow = allRows.find(r => (r.json.api_key || '').trim() === apiKey)\nif (!matchRow) {\n  return [{ json: { allowed: false, reason: 'invalid_key', userEmail, keyword, location, apiKey } }]\n}\n\nconst row = matchRow.json\nconst isActive = (row.active || '').toString().toLowerCase().trim() === 'yes'\nif (!isActive) {\n  return [{ json: { allowed: false, reason: 'inactive_key', userEmail, keyword, location, apiKey } }]\n}\n\nconst limit      = parseInt(row.daily_limit) || 5\nconst lastReset  = (row.last_reset || '').trim()\nconst isNewDay   = !lastReset || lastReset < today\nconst currentCnt = isNewDay ? 0 : parseInt(row.daily_count) || 0\nconst newCount   = currentCnt + 1\n\nif (newCount > limit) {\n  return [{ json: { allowed: false, reason: 'rate_limited', userEmail, keyword, location, apiKey, remaining: 0 } }]\n}\n\nreturn [{\n  json: {\n    allowed: true, apiKey, newCount, today, keyword, location, userEmail,\n    remaining: limit - newCount\n  }\n}]\n"
+      },
+      "id": "b1000001-0000-4000-8000-000000000006",
+      "name": "Validate & Check Rate Limit",
+      "type": "n8n-nodes-base.code",
+      "position": [760, 480],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-allowed-v5-001",
+              "operator": { "type": "boolean", "operation": "true" },
+              "leftValue": "={{ $json.allowed }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1000001-0000-4000-8000-000000000007",
+      "name": "IF: Key Valid & Not Rate Limited",
+      "type": "n8n-nodes-base.if",
+      "position": [1000, 480],
+      "typeVersion": 2.1
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw",
+          "mode": "list",
+          "cachedResultName": "n8n Data sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 878241883,
+          "mode": "list",
+          "cachedResultName": "API KEYS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1UlsQyKtT8paxyJbXSlJiSFz4d37MXAfeoZE5QwUbCyw/edit#gid=878241883"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "api_key": "={{ $json.apiKey }}",
+            "daily_count": "={{ $json.newCount }}",
+            "last_reset": "={{ $json.today }}"
+          },
+          "matchingColumns": ["api_key"],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "b1000001-0000-4000-8000-000000000008",
+      "name": "Update Usage Count",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [1240, 360],
+      "typeVersion": 4.5,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3yNBC63ijTtfDEDM",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "host1@baselearner.fun",
+        "toEmail": "={{ $json.userEmail }}",
+        "subject": "Lead Generator — Request Not Processed",
+        "emailType": "html",
+        "message": "=<html><body style=\"font-family:sans-serif;max-width:520px;margin:40px auto\"><h2>Request Not Processed</h2><p>{{ $json.reason === 'rate_limited' ? 'You have used all <strong>5 daily requests</strong> for your API key. Resets at midnight UTC — try again tomorrow.' : 'Your API key is <strong>invalid or inactive</strong>. Contact the administrator.' }}</p></body></html>",
+        "options": {}
+      },
+      "id": "b1000001-0000-4000-8000-000000000009",
+      "name": "Send Rate Limit Email",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [1240, 600],
+      "typeVersion": 2.1,
+      "credentials": {
+        "smtp": { "id": "7SXIjQEkfuxSte4I", "name": "SMTP account" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apollo.io/v1/mixed_people/search",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "q_keywords", "value": "={{ $json.keyword }}" },
+            {
+              "name": "organization_locations[]",
+              "value": "={{ $json.location }}"
+            },
+            { "name": "page", "value": "1" },
+            { "name": "per_page", "value": "25" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1000001-0000-4000-8000-000000000010",
+      "name": "Apollo People Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1480, 360],
+      "typeVersion": 4.2,
+      "credentials": { "httpHeaderAuth": { "id": "", "name": "Apollo.io API" } }
+    },
+    {
+      "parameters": { "fieldToSplitOut": "people", "options": {} },
+      "id": "b1000001-0000-4000-8000-000000000011",
+      "name": "Split Out People",
+      "type": "n8n-nodes-base.splitOut",
+      "position": [1720, 360],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-has-email-v5-001",
+              "operator": { "type": "string", "operation": "notEmpty" },
+              "leftValue": "={{ $json.email || '' }}",
+              "rightValue": ""
+            },
+            {
+              "id": "cond-not-locked-v5-002",
+              "operator": { "type": "string", "operation": "notContains" },
+              "leftValue": "={{ $json.email || '' }}",
+              "rightValue": "email_not_unlocked"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1000001-0000-4000-8000-000000000012",
+      "name": "Filter: Has Real Email",
+      "type": "n8n-nodes-base.filter",
+      "position": [1960, 360],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "compare": "selectedFields",
+        "fieldsToCompare": "email",
+        "options": {}
+      },
+      "id": "b1000001-0000-4000-8000-000000000013",
+      "name": "Remove Duplicate Emails",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "position": [2200, 360],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            { "fieldToAggregate": "first_name" },
+            { "fieldToAggregate": "last_name" },
+            { "fieldToAggregate": "title" },
+            { "fieldToAggregate": "organization.name" },
+            { "fieldToAggregate": "email" },
+            { "fieldToAggregate": "linkedin_url" }
+          ]
+        },
+        "options": { "mergeLists": false }
+      },
+      "id": "b1000001-0000-4000-8000-000000000014",
+      "name": "Aggregate All Leads",
+      "type": "n8n-nodes-base.aggregate",
+      "position": [2440, 360],
+      "typeVersion": 1,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const names    = $json.first_name || []\nconst lasts    = $json.last_name || []\nconst titles   = $json.title || []\nconst orgs     = $json['organization.name'] || []\nconst emails   = $json.email || []\n\nconst ctx       = $('Validate & Check Rate Limit').first().json\nconst keyword   = ctx.keyword   || ''\nconst location  = ctx.location  || ''\nconst userEmail = ctx.userEmail || ''\nconst remaining = ctx.remaining !== undefined ? ctx.remaining : '?'\n\nconst subject = `Lead Generation Results: ${keyword} in ${location}`\n\nif (emails.length === 0) {\n  return { json: { toEmail: userEmail, subject,\n    emailBody: `<html><body style=\"font-family:sans-serif;max-width:580px;margin:40px auto\"><h2>Lead Generation Complete</h2><p><strong>Keyword:</strong> ${keyword}<br><strong>Location:</strong> ${location}</p><p>No verified contacts found. Try a broader keyword or location.</p><p style=\"color:#888\">Requests remaining today: ${remaining}</p></body></html>`\n  } }\n}\n\nconst rows = emails.map((email, i) => `\n  <tr>\n    <td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${names[i] || ''} ${lasts[i] || ''}</td>\n    <td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${titles[i] || ''}</td>\n    <td style=\"padding:6px 10px;border-bottom:1px solid #eee\">${orgs[i] || ''}</td>\n    <td style=\"padding:6px 10px;border-bottom:1px solid #eee;font-family:monospace\">${email}</td>\n  </tr>`).join('')\n\nreturn { json: { toEmail: userEmail, subject,\n  emailBody: `<html><body style=\"font-family:sans-serif;max-width:720px;margin:40px auto\"><h2>Lead Generation Results</h2><p><strong>Keyword:</strong> ${keyword} &nbsp;|&nbsp; <strong>Location:</strong> ${location} &nbsp;|&nbsp; <strong>Leads Found:</strong> ${emails.length}</p><table style=\"border-collapse:collapse;width:100%\"><tr style=\"background:#f4f4f4\"><th style=\"padding:6px 10px;text-align:left\">Name</th><th style=\"padding:6px 10px;text-align:left\">Title</th><th style=\"padding:6px 10px;text-align:left\">Company</th><th style=\"padding:6px 10px;text-align:left\">Email</th></tr>${rows}</table><p style=\"color:#888;margin-top:20px\">Requests remaining today: ${remaining} of 5</p></body></html>`\n} }\n"
+      },
+      "id": "b1000001-0000-4000-8000-000000000015",
+      "name": "Format Email Body",
+      "type": "n8n-nodes-base.code",
+      "position": [2680, 360],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "fromEmail": "host1@baselearner.fun",
+        "toEmail": "={{ $json.toEmail }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.emailBody }}",
+        "options": {}
+      },
+      "id": "b1000001-0000-4000-8000-000000000016",
+      "name": "Send Results Email",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [2920, 360],
+      "typeVersion": 2.1,
+      "credentials": {
+        "smtp": { "id": "7SXIjQEkfuxSte4I", "name": "SMTP account" }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          { "node": "Respond to Webhook", "type": "main", "index": 0 },
+          { "node": "Read API Keys", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Read API Keys": {
+      "main": [
+        [{ "node": "Validate & Check Rate Limit", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate & Check Rate Limit": {
+      "main": [
+        [
+          {
+            "node": "IF: Key Valid & Not Rate Limited",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Key Valid & Not Rate Limited": {
+      "main": [
+        [{ "node": "Update Usage Count", "type": "main", "index": 0 }],
+        [{ "node": "Send Rate Limit Email", "type": "main", "index": 0 }]
+      ]
+    },
+    "Update Usage Count": {
+      "main": [[{ "node": "Apollo People Search", "type": "main", "index": 0 }]]
+    },
+    "Apollo People Search": {
+      "main": [[{ "node": "Split Out People", "type": "main", "index": 0 }]]
+    },
+    "Split Out People": {
+      "main": [
+        [{ "node": "Filter: Has Real Email", "type": "main", "index": 0 }]
+      ]
+    },
+    "Filter: Has Real Email": {
+      "main": [
+        [{ "node": "Remove Duplicate Emails", "type": "main", "index": 0 }]
+      ]
+    },
+    "Remove Duplicate Emails": {
+      "main": [[{ "node": "Aggregate All Leads", "type": "main", "index": 0 }]]
+    },
+    "Aggregate All Leads": {
+      "main": [[{ "node": "Format Email Body", "type": "main", "index": 0 }]]
+    },
+    "Format Email Body": {
+      "main": [[{ "node": "Send Results Email", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "b851729c4f05012fd2520a7100cb43771808c7f8bbf8d626a72f677e956f6878"
+  }
+}
